@@ -1,0 +1,58 @@
+# Build artifacts
+cpp/build/
+rust/target/
+*.o
+*.so
+*.dylib
+*.exe
+
+# Data files
+data/vecdb.bin
+data/vecdb.rsbin
+data/*.bin
+data/*.rsbin
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Logs
+*.log
+/tmp/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+venv/
+env/
+
+# Rust
+Cargo.lock
+**/*.rs.bk
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+*.cmake
+!CMakeLists.txt
+
+# Dependencies
+node_modules/
+third_party/*
+!third_party/.gitkeep
+
+# Backup files
+*.bak
+*.backup
+*~
+
+# OS
+Thumbs.db
+.DS_Store
