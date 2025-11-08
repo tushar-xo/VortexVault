@@ -6,7 +6,7 @@
 #include <vector>
 
 #ifndef EMBEDDING_DIM
-constexpr std::size_t EMBEDDING_DIM = 128;
+constexpr std::size_t EMBEDDING_DIM = 384;
 #endif
 
 void initEmbeddings(const std::string& model_path);

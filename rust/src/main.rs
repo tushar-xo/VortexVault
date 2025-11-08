@@ -2,6 +2,7 @@ mod kdtree;
 mod embed;
 
 use actix_web::{web, App, HttpServer, Result};
+use actix_cors::Cors;
 use serde::{Deserialize, Serialize};
 use regex::Regex;
 use kdtree::KDTreeVectorDB;
@@ -46,7 +47,7 @@ async fn upload_resume(data: web::Json<UploadRequest>, db: web::Data<std::sync::
 
 async fn query(data: web::Json<QueryRequest>, db: web::Data<std::sync::Mutex<KDTreeVectorDB>>) -> Result<String> {
     let query_vec = embed::embed_text(&data.query);
-    let mut db = db.lock().unwrap();
+    let db = db.lock().unwrap();
     let results = db.query(&query_vec, data.k);
 
     let mut resp: Vec<QueryResult> = Vec::new();
@@ -58,18 +59,38 @@ async fn query(data: web::Json<QueryRequest>, db: web::Data<std::sync::Mutex<KDT
     Ok(serde_json::to_string(&resp).unwrap())
 }
 
+async fn clear_database(db: web::Data<std::sync::Mutex<KDTreeVectorDB>>) -> Result<String> {
+    let mut db = db.lock().unwrap();
+    db.clear();
+    Ok("Database cleared successfully".to_string())
+}
+
+async fn get_stats(db: web::Data<std::sync::Mutex<KDTreeVectorDB>>) -> Result<String> {
+    let db = db.lock().unwrap();
+    let stats = serde_json::json!({
+        "total_vectors": db.size(),
+        "dimension": 384
+    });
+    Ok(serde_json::to_string(&stats).unwrap())
+}
+
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     embed::init_embeddings("sentence-transformers/all-MiniLM-L6-v2");
     let db = web::Data::new(std::sync::Mutex::new(KDTreeVectorDB::new(384)));
 
     HttpServer::new(move || {
+        let cors = Cors::permissive();
+        
         App::new()
+            .wrap(cors)
             .app_data(db.clone())
             .route("/upload_resume", web::post().to(upload_resume))
             .route("/query", web::post().to(query))
+            .route("/clear", web::post().to(clear_database))
+            .route("/stats", web::get().to(get_stats))
     })
-    .bind("0.0.0.0:8081")?
+    .bind("0.0.0.0:8080")?
     .run()
     .await
 }

@@ -1,6 +1,23 @@
 use std::collections::BinaryHeap;
-use std::cmp::Reverse;
+use std::cmp::Ordering;
 use serde::{Serialize, Deserialize};
+
+#[derive(Clone, PartialEq)]
+struct OrderedFloat(f32);
+
+impl Eq for OrderedFloat {}
+
+impl Ord for OrderedFloat {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.0.partial_cmp(&other.0).unwrap_or(Ordering::Equal)
+    }
+}
+
+impl PartialOrd for OrderedFloat {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
 
 #[derive(Clone, Serialize, Deserialize)]
 struct KDNode {
@@ -67,16 +84,16 @@ impl KDTreeVectorDB {
                 right: None,
             }));
         } else {
-            self.insert_rec(self.root.as_mut().unwrap(), vec, id, meta, 0);
+            Self::insert_rec_static(self.root.as_mut().unwrap(), vec, id, meta, 0, self.dimension);
         }
         id
     }
 
-    fn insert_rec(&self, node: &mut KDNode, point: Vec<f32>, id: usize, meta: String, depth: usize) {
-        let axis = depth % self.dimension;
+    fn insert_rec_static(node: &mut KDNode, point: Vec<f32>, id: usize, meta: String, depth: usize, dimension: usize) {
+        let axis = depth % dimension;
         if point[axis] < node.point[axis] {
             if node.left.is_some() {
-                self.insert_rec(node.left.as_mut().unwrap(), point, id, meta, depth + 1);
+                Self::insert_rec_static(node.left.as_mut().unwrap(), point, id, meta, depth + 1, dimension);
             } else {
                 node.left = Some(Box::new(KDNode {
                     point,
@@ -88,7 +105,7 @@ impl KDTreeVectorDB {
             }
         } else {
             if node.right.is_some() {
-                self.insert_rec(node.right.as_mut().unwrap(), point, id, meta, depth + 1);
+                Self::insert_rec_static(node.right.as_mut().unwrap(), point, id, meta, depth + 1, dimension);
             } else {
                 node.right = Some(Box::new(KDNode {
                     point,
@@ -105,20 +122,20 @@ impl KDTreeVectorDB {
         if self.root.is_none() || query_vec.len() != self.dimension {
             return Vec::new();
         }
-        let mut pq: BinaryHeap<Reverse<(f32, usize)>> = BinaryHeap::new();
+        let mut pq: BinaryHeap<(OrderedFloat, usize)> = BinaryHeap::new();
         self.knn_search(self.root.as_ref().unwrap(), query_vec, 0, k, &mut pq);
-        let mut results: Vec<(usize, f32)> = pq.into_iter().map(|Reverse((dist, id))| (id, dist)).collect();
+        let mut results: Vec<(usize, f32)> = pq.into_iter().map(|(dist, id)| (id, dist.0)).collect();
         results.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
         results
     }
 
-    fn knn_search(&self, node: &KDNode, query: &Vec<f32>, depth: usize, k: usize, pq: &mut BinaryHeap<Reverse<(f32, usize)>>) {
+    fn knn_search(&self, node: &KDNode, query: &Vec<f32>, depth: usize, k: usize, pq: &mut BinaryHeap<(OrderedFloat, usize)>) {
         let dist = Self::distance(&node.point, query);
         if pq.len() < k {
-            pq.push(Reverse((dist, node.id)));
+            pq.push((OrderedFloat(dist), node.id));
         } else if dist < pq.peek().unwrap().0.0 {
             pq.pop();
-            pq.push(Reverse((dist, node.id)));
+            pq.push((OrderedFloat(dist), node.id));
         }
 
         let axis = depth % self.dimension;
@@ -144,7 +161,7 @@ impl KDTreeVectorDB {
         self.find_node(self.root.as_ref()?, id, 0).map(|node| node.metadata.clone())
     }
 
-    fn find_node(&self, node: &KDNode, id: usize, depth: usize) -> Option<&KDNode> {
+    fn find_node<'a>(&self, node: &'a KDNode, id: usize, depth: usize) -> Option<&'a KDNode> {
         if node.id == id {
             return Some(node);
         }
@@ -154,7 +171,10 @@ impl KDTreeVectorDB {
         } else {
             &node.right
         };
-        branch.as_ref()?.as_ref().and_then(|n| self.find_node(n, id, depth + 1))
+        match branch.as_ref() {
+            Some(n) => self.find_node(n, id, depth + 1),
+            None => None
+        }
     }
 
     pub fn save_to_file(&self, filename: &str) -> Result<(), Box<dyn std::error::Error>> {
@@ -175,5 +195,11 @@ impl KDTreeVectorDB {
 
     pub fn size(&self) -> usize {
         self.next_id
+    }
+
+    pub fn clear(&mut self) {
+        self.root = None;
+        self.next_id = 0;
+        self.all_vectors.clear();
     }
 }
